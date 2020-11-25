@@ -1,7 +1,10 @@
 """playerManualController controller"""
+"""
+this controller allows for user control of an epuck
+they can use either the arrow keys or wasd to control it
+it supports combinations of keys, for up to a total of 8 directions and stopped
+"""
 
-# You may need to import some classes of the controller module. Ex:
-#  from controller import Robot, Motor, DistanceSensor
 import math
 from controller import Robot, Motor, DistanceSensor, GPS
 import numpy as np
@@ -33,6 +36,7 @@ SIM_TIMESTEP = int(robot.getBasicTimeStep())
 
 # exchanges keyboard keys for numeric directions
 # see function getDirection() for encodings
+# allows for both keypad and wasd
 key2dir = {
     Keyboard.LEFT: 6,
     65: 6, # a
@@ -60,7 +64,7 @@ dir2wheels = {
 # reads the keys and converts them into a direction to travel in
 # values range from 0-7 and -1, representing the 8 directions and stopped
 # 0 is forward and they increase clockwise, with 2 being right, 4 being
-# backwards, 6 being right, and -1 being stopped
+# backwards, 6 being left, and -1 being stopped
 def getDirection():
     global keyboard
 
@@ -76,10 +80,10 @@ def getDirection():
     if key2 == -1 or key2 not in key2dir:
         return key2dir[key1]
     
-    # if they're close, merge the two keys together to get a joint dist
+    # if they're close, merge the two keys together to get a joint direction
     key1 = key2dir[key1]
     key2 = key2dir[key2]
-    # across from each other, just do one
+    # opposite keys/across from each other, just do the first one
     if abs(key1 - key2) == 4:
         return key1
     # 0 and 6, the one special case since it loops
@@ -92,10 +96,15 @@ def getDirection():
 
 def main():
     global keyboard
+
     # enable the keyboard to start getting inputs
     # the argument is the sampling period, in milliseconds
+    # I put the timestep because it feels right, this may need fixing later
     keyboard.enable(SIM_TIMESTEP)
     
+    # try/except so that we can stop the robot if anything strange happens
+    #   this is mostly since the user has control here and so we don't know what to expect
+    #   and also because I was breaking it a lot earlier
     try:
         while robot.step(SIM_TIMESTEP) != -1:
             direction = getDirection()
@@ -103,6 +112,7 @@ def main():
 
             leftMotor.setVelocity(left_dir * LEFT_VEL_REDUCTION)
             rightMotor.setVelocity(right_dir * RIGHT_VEL_REDUCTION)
+
     # stop the robot whether we ran into an error or not
     finally:
         leftMotor.setVelocity(WHEEL_STOPPED * leftMotor.getMaxVelocity())
