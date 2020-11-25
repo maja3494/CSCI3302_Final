@@ -28,26 +28,29 @@ state = "stationary" #change to moving or stationary
 sub_state = "forward"
 
 # Main loop:
-# - perform simulation steps until Webots is stopping the controller
-count = 0
-while robot.step(timestep) != -1:
-    if(state == "stationary"):
-        pass
-    elif(state == "moving"):
-        if(sub_state == "forward"):
-            velocity = WHEEL_FORWARD*leftMotor.getMaxVelocity()
-            count += 1
-            if(count == TimeTillTurn):
-                sub_state = "backward"
-                count = 0
-        elif(sub_state == "backward"):
-            velocity = WHEEL_BACKWARD*leftMotor.getMaxVelocity()
-            count += 1
-            if(count == TimeTillTurn):
-                sub_state = "forward"
-                count = 0
-            
-        leftMotor.setVelocity(velocity)
-        rightMotor.setVelocity(velocity)
+def main():
+    # - perform simulation steps until Webots is stopping the controller
+    count = 0
+    while robot.step(timestep) != -1:
+        if(state == "stationary"):
+            pass
+        elif(state == "moving"):
+            if(sub_state == "forward"):
+                velocity = WHEEL_FORWARD*leftMotor.getMaxVelocity()
+                count += 1
+                if(count == TimeTillTurn):
+                    sub_state = "backward"
+                    count = 0
+            elif(sub_state == "backward"):
+                velocity = WHEEL_BACKWARD*leftMotor.getMaxVelocity()
+                count += 1
+                if(count == TimeTillTurn):
+                    sub_state = "forward"
+                    count = 0
+                
+            leftMotor.setVelocity(velocity)
+            rightMotor.setVelocity(velocity)
+    # Any code to cleanup on exit
 
-# Enter here exit cleanup code.
+if __name__ == "__main__":
+    main()

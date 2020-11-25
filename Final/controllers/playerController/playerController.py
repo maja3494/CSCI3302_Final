@@ -5,7 +5,6 @@
 import math
 from controller import Robot, Motor, DistanceSensor, GPS
 import numpy as np
-import csci3302_lab3_supervisor
 
 WHEEL_FORWARD = 1
 WHEEL_STOPPED = 0
