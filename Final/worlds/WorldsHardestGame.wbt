@@ -4,21 +4,21 @@ WorldInfo {
 }
 Viewpoint {
   orientation 1 0 0 4.71238898038469
-  position -2.718541612104338e-17 2.225273148474327 3.1090763049379196e-16
+  position -2.718541612104338e-17 3.4076048702048056 9.371681671164937e-17
 }
 TexturedBackground {
 }
 TexturedBackgroundLight {
 }
 Floor {
-  size 1.5 1.5
+  size 1.1 1.1
   tileSize 0.1 0.1
   appearance Parquetry {
     type "chequered"
     colorOverride 0.532113 0.869306 0.999145
   }
 }
-Solid {
+DEF Wall Solid {
   translation 0.43 0.02 -0.06
   rotation 0 1 0 1.5708
   children [
@@ -33,33 +33,33 @@ Solid {
     }
   ]
 }
-DEF Enemy1 E-puck {
+DEF Enemy E-puck {
   translation -0.31 0 0.3
   rotation 0 1 0 -1.5707953071795862
   name "e-puck(1)"
   controller "enemy_controller"
 }
-DEF Enemy2 E-puck {
+DEF Enemy E-puck {
   translation 0.34 0 0.14
   rotation 0 1 0 1.5708
   name "e-puck(3)"
   controller "enemy_controller"
 }
-DEF Enemy4 E-puck {
+DEF Enemy E-puck {
   translation 0.33 0 -0.2
   rotation 0 1 0 1.5708
   name "e-puck(4)"
   controller "enemy_controller"
 }
-DEF Enemy3 E-puck {
+DEF Enemy E-puck {
   translation -0.32 0 -0.06
   rotation 0 1 0 -1.5707953071795862
   name "e-puck(2)"
   controller "enemy_controller"
 }
-Solid {
+DEF Wall Solid {
   translation -0.0405 0.02 -0.479999
-  rotation 0 -1 0 -5.307179586466759e-06
+  rotation 0 -1 0 0
   children [
     Shape {
       appearance PBRAppearance {
@@ -73,7 +73,7 @@ Solid {
   ]
   name "solid(3)"
 }
-Solid {
+DEF Wall Solid {
   translation -0.4 0.02 0.120002
   rotation 0 1 0 1.5708
   children [
@@ -89,9 +89,9 @@ Solid {
   ]
   name "solid(1)"
 }
-Solid {
+DEF Wall Solid {
   translation 0.0700038 0.02 0.540001
-  rotation 0 -1 0 -5.307179586466759e-06
+  rotation 0 -1 0 0
   children [
     Shape {
       appearance PBRAppearance {
@@ -105,7 +105,7 @@ Solid {
   ]
   name "wall_1"
 }
-Solid {
+DEF Wall Solid {
   translation -0.509999 0.02 -0.389999
   rotation 0 1 0 -1.5707953071795862
   children [
@@ -121,7 +121,7 @@ Solid {
   ]
   name "solid(4)"
 }
-Solid {
+DEF Wall Solid {
   translation 0.540001 0.02 0.450001
   rotation 0 1 0 -1.5707953071795862
   children [
@@ -137,9 +137,8 @@ Solid {
   ]
   name "solid(6)"
 }
-Solid {
+DEF Wall Solid {
   translation -0.449999 0.02 -0.309999
-  rotation 0 1 0 1.01503e-06
   children [
     Shape {
       appearance PBRAppearance {
@@ -153,9 +152,8 @@ Solid {
   ]
   name "solid(5)"
 }
-Solid {
+DEF Wall Solid {
   translation 0.480001 0.02 0.360001
-  rotation 0 1 0 1.01503e-06
   children [
     Shape {
       appearance PBRAppearance {
@@ -169,7 +167,7 @@ Solid {
   ]
   name "solid(7)"
 }
-Solid {
+DEF Goal Solid {
   translation -0.44 0.01 -0.4
   scale 0.1 0.1 0.1
   children [
@@ -187,7 +185,8 @@ Solid {
   ]
   name "goal"
 }
-E-puck {
+DEF Player E-puck {
   translation 0.32 0 0.44
   controller "playerController"
+  supervisor TRUE
 }

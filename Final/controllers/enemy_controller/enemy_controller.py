@@ -29,6 +29,7 @@ sub_state = "forward"
 
 # Main loop:
 def main():
+    global sub_state
     # - perform simulation steps until Webots is stopping the controller
     count = 0
     while robot.step(timestep) != -1:
