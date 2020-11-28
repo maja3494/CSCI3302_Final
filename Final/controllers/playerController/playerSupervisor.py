@@ -89,7 +89,7 @@ def supervisor_get_target_pose():
     '''
 
     target_position = np.array(target_node.getField("translation").getSFVec3f())
-    target_pose = np.array([target_position[0], 1. - target_position[2], target_node.getField("rotation").getSFRotation()[3] + math.pi/2.])
+    target_pose = np.array([target_position[0], target_position[2], target_node.getField("rotation").getSFRotation()[3] + math.pi/2.])
     # print("Target pose relative to robot: %s" % (str(target_pose)))
     return target_pose
 
@@ -99,5 +99,5 @@ def supervisor_get_robot_pose():
     Returns robot position
     """
     robot_position = np.array(robot_node.getField("translation").getSFVec3f())
-    robot_pose = np.array([robot_position[0], 1. - robot_position[2], robot_node.getField("rotation").getSFRotation()[3]+math.pi/2])
+    robot_pose = np.array([robot_position[0], robot_position[2], robot_node.getField("rotation").getSFRotation()[3]+math.pi/2])
     return robot_pose
