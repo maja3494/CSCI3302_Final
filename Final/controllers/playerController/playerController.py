@@ -20,11 +20,28 @@ WALL_COORDS = playerSupervisor.supervisor_get_walls()
 player_node = playerSupervisor.supervisor_get_robot_pose()
 goal_node = playerSupervisor.supervisor_get_target_pose()
 
+state = "get_path"
+sub_state=0
+global_path=[]
 '''
 Global variables concerning the EPUCK
 '''
+EPUCK_MAX_WHEEL_SPEED = 0.12880519 # m/s
 EPUCK_DIAMETER = .074
 EPUCK_RADIUS = EPUCK_DIAMETER / 2
+
+# GAIN Values
+theta_gain = 1.0
+distance_gain = 0.3
+
+MAX_VEL_REDUCTION = 0.25
+
+# Robot Pose Values
+pose_x = 0
+pose_y = 0
+pose_theta = 0
+left_wheel_direction = 0
+right_wheel_direction = 0
 
 '''
 Global variables being analagous to MACROs
@@ -41,6 +58,84 @@ leftMotor.setPosition(float('inf'))
 rightMotor.setPosition(float('inf'))
 leftMotor.setVelocity(0.0)
 rightMotor.setVelocity(0.0)
+
+
+
+def update_odometry(left_wheel_direction, right_wheel_direction, time_elapsed):
+    '''
+    Given the amount of time passed and the direction each wheel was rotating,
+    update the robot's pose information accordingly
+    '''
+    global pose_x, pose_y, pose_theta, EPUCK_MAX_WHEEL_SPEED, EPUCK_DIAMETER
+    pose_theta += (right_wheel_direction - left_wheel_direction) * time_elapsed * EPUCK_MAX_WHEEL_SPEED / EPUCK_DIAMETER
+    pose_x += math.cos(pose_theta) * time_elapsed * EPUCK_MAX_WHEEL_SPEED * (left_wheel_direction + right_wheel_direction)/2.
+    pose_y += math.sin(pose_theta) * time_elapsed * EPUCK_MAX_WHEEL_SPEED * (left_wheel_direction + right_wheel_direction)/2.
+    pose_theta = get_bounded_theta(pose_theta)
+
+
+def get_bounded_theta(theta):
+    '''
+    Returns theta bounded in [-PI, PI]
+    '''
+    while theta > math.pi: theta -= 2.*math.pi
+    while theta < -math.pi: theta += 2.*math.pi
+    return theta
+
+
+def get_wheel_speeds(target_pose):
+    '''
+    @param target_pose: Array of (x,y,theta) for the destination robot pose
+    @return motor speed as percentage of maximum for left and right wheel motors
+    '''
+    global pose_x, pose_y, pose_theta, left_wheel_direction, right_wheel_direction
+    global EPUCK_DIAMETER, EPUCK_RADIUS, MAX_VEL_REDUCTION, theta_gain, distance_gain
+    pose_x, pose_y, pose_theta = playerSupervisor.supervisor_get_robot_pose()
+
+
+    bearing_error = math.atan2( (target_pose[1] - pose_y), (target_pose[0] - pose_x) ) - pose_theta
+    distance_error = np.linalg.norm(target_pose[:2] - np.array([pose_x,pose_y]))
+    heading_error = target_pose[2] -  pose_theta
+
+    print("Errors:", bearing_error, distance_error, heading_error)
+    BEAR_THRESHOLD = 0.06
+    DIST_THRESHOLD = 0.05
+    dT_gain = theta_gain
+    dX_gain = distance_gain
+    if distance_error > DIST_THRESHOLD:
+        print("dist")
+        dTheta = bearing_error
+        if abs(bearing_error) > BEAR_THRESHOLD:
+            dX_gain = 0
+    else:
+        print("close enough")
+        dTheta = heading_error
+        dX_gain = 0
+
+    dTheta *= dT_gain
+    dX = dX_gain * min(3.14159, distance_error)
+
+    phi_l = (dX - (dTheta*EPUCK_DIAMETER/2.)) / EPUCK_RADIUS
+    phi_r = (dX + (dTheta*EPUCK_DIAMETER/2.)) / EPUCK_RADIUS
+
+    left_speed_pct = 0
+    right_speed_pct = 0
+
+    wheel_rotation_normalizer = max(abs(phi_l), abs(phi_r))
+    left_speed_pct = (phi_l) / wheel_rotation_normalizer
+    right_speed_pct = (phi_r) / wheel_rotation_normalizer
+
+    if distance_error < 0.05 and abs(heading_error) < 0.05:
+        left_speed_pct = 0
+        right_speed_pct = 0
+
+    left_wheel_direction = left_speed_pct * MAX_VEL_REDUCTION
+    phi_l_pct = left_speed_pct * MAX_VEL_REDUCTION * leftMotor.getMaxVelocity()
+
+    right_wheel_direction = right_speed_pct * MAX_VEL_REDUCTION
+    phi_r_pct = right_speed_pct * MAX_VEL_REDUCTION * rightMotor.getMaxVelocity()
+
+    print(phi_l_pct,phi_r_pct)
+    return phi_l_pct, phi_r_pct
 
 
 '''
@@ -75,7 +170,7 @@ def get_nearest_vertex(node_list, q_point):
     '''
     neighbor = None
     min_dist = float('Inf')
-    
+
     for node in node_list:
         # print(node.point, q_point)
         dist = np.linalg.norm(node.point - q_point)
@@ -115,10 +210,9 @@ def rrt(starting_point, goal_point, k, delta_q):
 
     node_list.append(Node(starting_point, parent=None)) # Add Node at starting point with no parent
     node_list[0].path_from_parent += [node_list[0].point]
-    
+
     for i in range(k):
         valid = False
-
         while (not valid):
             # Naively sample a point (and is there is a goal state periodically use that)
             new_point = get_random_valid_vertex() if (goal_point is None or np.random.random_sample() > .05) else goal_point
@@ -127,10 +221,10 @@ def rrt(starting_point, goal_point, k, delta_q):
 
             # Scale this to proper distance
             path, new_point = steer(parent.point, new_point, delta_q)
-            
+
             # Check validity of point
             valid = True
-            for p in path: 
+            for p in path:
                 # print(check_point_v_enemy(p), check_point_v_walls(p))
                 valid = valid and check_point_v_enemy(p) and check_point_v_walls(p)
 
@@ -176,7 +270,7 @@ def visualize_2D_graph(nodes, goal_point=None):
 
     if goal is not None:
         cur_node = goal
-        while cur_node is not None: 
+        while cur_node is not None:
             if cur_node.parent is not None:
                 node_path = np.array(cur_node.path_from_parent)
                 plt.plot(node_path[:,0], node_path[:,1], '--y')
@@ -235,23 +329,91 @@ def check_point_v_walls(p):
 
 def main():
     global player_node, goal_node, BOUNDS
+    global robot, state, global_path
+    global leftMotor, rightMotor, SIM_TIMESTEP, WHEEL_FORWARD, WHEEL_STOPPED, WHEEL_BACKWARD
+    # global pose_x, pose_y, pose_theta, left_wheel_direction, right_wheel_direction
+
+
+    last_odometry_update_time = None
+
+    # Keep track of which direction each wheel is turning
+    left_wheel_direction = WHEEL_STOPPED
+    right_wheel_direction = WHEEL_STOPPED
+
 
     # sensor burn in period
     for i in range(10): robot.step(SIM_TIMESTEP)
-    
+
     # while robot.step(SIM_TIMESTEP) != -1:
     # print(check_point_v_walls((.43 - EPUCK_DIAMETER - .01,-.16)))
 
     K = 250 # Feel free to adjust as desired
-    starting_point = player_node
-    nodes = rrt(starting_point[:2], goal_node[:2], K, np.linalg.norm(BOUNDS/10.))
-    visualize_2D_graph(nodes, goal_node[:2])
-        
-    
+    # starting_point = player_node
+    # nodes = rrt(starting_point[:2], goal_node[:2], K, np.linalg.norm(BOUNDS/10.))
+    # visualize_2D_graph(nodes, goal_node[:2])
+
+    while robot.step(SIM_TIMESTEP) != -1:
+
+        # if last_odometry_update_time is None:
+        #         last_odometry_update_time = robot.getTime()
+        # time_elapsed = robot.getTime() - last_odometry_update_time
+        # update_odometry(left_wheel_direction, right_wheel_direction, time_elapsed)
+        # last_odometry_update_time = robot.getTime()
+        if state == 'get_path':
+            sub_state=0
+            starting_point = player_node
+            # Compute a path from start to target_pose
+            print("before rrt")
+            nodes = rrt(starting_point[:2], goal_node[:2], K, np.linalg.norm(BOUNDS/10.))
+            valid_start = False
+            valid_goal = -1
+            for i in range(0,len(nodes)):
+                if np.linalg.norm(starting_point[:2]-nodes[i].point) < 1e-5:
+                    valid_start = True
+                if np.linalg.norm(goal_node[:2]-nodes[i].point) < 1e-5:
+                    valid_goal = i
+            if valid_goal != -1 and valid_start:
+                state = 'get_waypoint'
+                global_path=nodes[valid_goal].path_from_parent
+                print(global_path)
+            else:
+                print("Impossible path computed")
+                break
+
+        elif state == 'get_waypoint':
+            if len(global_path) - 1 <= sub_state:
+                state='get_path'
+                continue
+            if sub_state + 1 == len(global_path) - 1:
+                theta=0
+            else:
+                curr=global_path[sub_state]
+                way_point=global_path[-1]
+                way_point[1]=(way_point[1] - BOUNDS[1][1]) * -1
+                way_point[0]=(way_point[0] + (BOUNDS[0][0])/2)
+                theta=math.atan2((way_point[1]-curr[1]),(way_point[0] - curr[0]))
+            state='move_to_waypoint'
+        elif state == 'move_to_waypoint':
+            print(way_point)
+            lspeed, rspeed = get_wheel_speeds((way_point[0], way_point[1],0))
+            # print(lspeed, rspeed)
+            leftMotor.setVelocity(lspeed)
+            rightMotor.setVelocity(rspeed)
+
+            if np.linalg.norm(goal_node[:2]-way_point):
+                state=="arrived"
+                continue
+
+            if lspeed==0 and rspeed==0:
+                state='get_waypoint'
+                sub_state+=1
+        else:
+                # Stop
+                print('arrived')
+                # left_wheel_direction, right_wheel_direction = 0, 0
+                leftMotor.setVelocity(0)
+                rightMotor.setVelocity(0)
+
+
 if __name__ == "__main__":
     main()
-
-
-
-
-
