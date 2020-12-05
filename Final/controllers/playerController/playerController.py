@@ -29,6 +29,8 @@ Global variables concerning the EPUCK
 EPUCK_MAX_WHEEL_SPEED = 0.12880519 # m/s
 EPUCK_DIAMETER = .074
 EPUCK_RADIUS = EPUCK_DIAMETER / 2
+EPUCK_AXLE_DIAMETER = 0.053
+EPUCK_WHEEL_RADIUS = 0.0205
 
 # GAIN Values
 theta_gain = 1.0
@@ -59,7 +61,12 @@ rightMotor.setPosition(float('inf'))
 leftMotor.setVelocity(0.0)
 rightMotor.setVelocity(0.0)
 
-
+'''
+translate_y - gets the y to compatible with our lab implementations
+@param - a world y value
+'''
+def translate_y(y):
+    return (y - BOUNDS[1][1]) * -1
 
 def update_odometry(left_wheel_direction, right_wheel_direction, time_elapsed):
     '''
@@ -88,55 +95,51 @@ def get_wheel_speeds(target_pose):
     @return motor speed as percentage of maximum for left and right wheel motors
     '''
     global pose_x, pose_y, pose_theta, left_wheel_direction, right_wheel_direction
-    global EPUCK_DIAMETER, EPUCK_RADIUS, MAX_VEL_REDUCTION, theta_gain, distance_gain
+
     pose_x, pose_y, pose_theta = playerSupervisor.supervisor_get_robot_pose()
 
+    pose_y = translate_y(pose_y)
 
     bearing_error = math.atan2( (target_pose[1] - pose_y), (target_pose[0] - pose_x) ) - pose_theta
     distance_error = np.linalg.norm(target_pose[:2] - np.array([pose_x,pose_y]))
     heading_error = target_pose[2] -  pose_theta
 
-    print("Errors:", bearing_error, distance_error, heading_error)
     BEAR_THRESHOLD = 0.06
-    DIST_THRESHOLD = 0.05
+    DIST_THRESHOLD = 0.03
     dT_gain = theta_gain
     dX_gain = distance_gain
     if distance_error > DIST_THRESHOLD:
-        print("dist")
         dTheta = bearing_error
         if abs(bearing_error) > BEAR_THRESHOLD:
             dX_gain = 0
     else:
-        print("close enough")
         dTheta = heading_error
         dX_gain = 0
 
     dTheta *= dT_gain
     dX = dX_gain * min(3.14159, distance_error)
 
-    phi_l = (dX - (dTheta*EPUCK_DIAMETER/2.)) / EPUCK_RADIUS
-    phi_r = (dX + (dTheta*EPUCK_DIAMETER/2.)) / EPUCK_RADIUS
+    phi_l = (dX - (dTheta*EPUCK_AXLE_DIAMETER/2.)) / EPUCK_WHEEL_RADIUS
+    phi_r = (dX + (dTheta*EPUCK_AXLE_DIAMETER/2.)) / EPUCK_WHEEL_RADIUS
 
     left_speed_pct = 0
     right_speed_pct = 0
-
+    
     wheel_rotation_normalizer = max(abs(phi_l), abs(phi_r))
     left_speed_pct = (phi_l) / wheel_rotation_normalizer
     right_speed_pct = (phi_r) / wheel_rotation_normalizer
-
-    if distance_error < 0.05 and abs(heading_error) < 0.05:
+    
+    if distance_error < 0.05 and abs(heading_error) < 0.05:    
         left_speed_pct = 0
         right_speed_pct = 0
-
+        
     left_wheel_direction = left_speed_pct * MAX_VEL_REDUCTION
     phi_l_pct = left_speed_pct * MAX_VEL_REDUCTION * leftMotor.getMaxVelocity()
 
     right_wheel_direction = right_speed_pct * MAX_VEL_REDUCTION
     phi_r_pct = right_speed_pct * MAX_VEL_REDUCTION * rightMotor.getMaxVelocity()
-
-    print(phi_l_pct,phi_r_pct)
+       
     return phi_l_pct, phi_r_pct
-
 
 '''
 RRT Stuff
@@ -225,7 +228,6 @@ def rrt(starting_point, goal_point, k, delta_q):
             # Check validity of point
             valid = True
             for p in path:
-                # print(check_point_v_enemy(p), check_point_v_walls(p))
                 valid = valid and check_point_v_enemy(p) and check_point_v_walls(p)
 
         # print('found a node')
@@ -389,12 +391,10 @@ def main():
             else:
                 curr=global_path[sub_state]
                 way_point=global_path[-1]
-                way_point[1]=(way_point[1] - BOUNDS[1][1]) * -1
-                way_point[0]=(way_point[0] + (BOUNDS[0][0])/2)
+                way_point[1] = translate_y(way_point[1])
                 theta=math.atan2((way_point[1]-curr[1]),(way_point[0] - curr[0]))
             state='move_to_waypoint'
         elif state == 'move_to_waypoint':
-            print(way_point)
             lspeed, rspeed = get_wheel_speeds((way_point[0], way_point[1],0))
             # print(lspeed, rspeed)
             leftMotor.setVelocity(lspeed)
