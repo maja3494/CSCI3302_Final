@@ -100,9 +100,12 @@ def get_wheel_speeds(target_pose):
 
     pose_y = translate_y(pose_y)
 
+    # print(target_pose[2],pose_theta)
     bearing_error = math.atan2( (target_pose[1] - pose_y), (target_pose[0] - pose_x) ) - pose_theta
     distance_error = np.linalg.norm(target_pose[:2] - np.array([pose_x,pose_y]))
     heading_error = target_pose[2] -  pose_theta
+
+    # print("h:",heading_error)
 
     BEAR_THRESHOLD = 0.06
     DIST_THRESHOLD = 0.03
@@ -129,7 +132,7 @@ def get_wheel_speeds(target_pose):
     left_speed_pct = (phi_l) / wheel_rotation_normalizer
     right_speed_pct = (phi_r) / wheel_rotation_normalizer
     
-    if distance_error < 0.05 and abs(heading_error) < 0.05:    
+    if distance_error < 0.05 and abs(heading_error) < 1:    
         left_speed_pct = 0
         right_speed_pct = 0
         
@@ -331,7 +334,7 @@ def check_point_v_walls(p):
 
 def main():
     global player_node, goal_node, BOUNDS
-    global robot, state, global_path
+    global robot, state, global_path, sub_state
     global leftMotor, rightMotor, SIM_TIMESTEP, WHEEL_FORWARD, WHEEL_STOPPED, WHEEL_BACKWARD
     # global pose_x, pose_y, pose_theta, left_wheel_direction, right_wheel_direction
 
@@ -366,48 +369,65 @@ def main():
             starting_point = player_node
             # Compute a path from start to target_pose
             print("before rrt")
-            nodes = rrt(starting_point[:2], goal_node[:2], K, np.linalg.norm(BOUNDS/10.))
-            valid_start = False
-            valid_goal = -1
-            for i in range(0,len(nodes)):
-                if np.linalg.norm(starting_point[:2]-nodes[i].point) < 1e-5:
-                    valid_start = True
-                if np.linalg.norm(goal_node[:2]-nodes[i].point) < 1e-5:
-                    valid_goal = i
-            if valid_goal != -1 and valid_start:
-                state = 'get_waypoint'
-                global_path=nodes[valid_goal].path_from_parent
-                print(global_path)
+            print("goal:",goal_node[:2])
+            psuedo_goal=goal_node[:2].copy()
+            psuedo_goal[0] += 0.2
+            print("psuedo:",psuedo_goal)
+            if check_point_v_walls(psuedo_goal):
+                nodes = rrt(starting_point[:2], psuedo_goal, K, np.linalg.norm(BOUNDS/10.))
+                valid_start = False
+                valid_goal = -1
+                for i in range(0,len(nodes)):
+                    if np.linalg.norm(starting_point[:2]-nodes[i].point) < 1e-5:
+                        valid_start = True
+                    if np.linalg.norm(psuedo_goal-nodes[i].point) < 1e-5:
+                        valid_goal = i
+                if valid_goal != -1 and valid_start:
+                    state = 'get_waypoint'
+                    global_path=nodes[valid_goal].path_from_parent[:-1]
+                    print(goal_node[:2])
+                    global_path.append(goal_node[:2])
+                    print(global_path)
+                    sub_state=0
+                else:
+                    print("Impossible path computed")
+                    break
             else:
-                print("Impossible path computed")
+                print("Select a valid target position")
                 break
 
         elif state == 'get_waypoint':
+            print("get new point:", )
             if len(global_path) - 1 <= sub_state:
+                print("oops")
                 state='get_path'
                 continue
+            curr=global_path[sub_state].copy()
+            way_point=global_path[sub_state+1].copy()
+            way_point[1] = translate_y(way_point[1])
+            print(curr,way_point)
             if sub_state + 1 == len(global_path) - 1:
                 theta=0
             else:
-                curr=global_path[sub_state]
-                way_point=global_path[-1]
-                way_point[1] = translate_y(way_point[1])
                 theta=math.atan2((way_point[1]-curr[1]),(way_point[0] - curr[0]))
             state='move_to_waypoint'
         elif state == 'move_to_waypoint':
+            #get wheel speed heading error currently set to 1 we will need to change that eventually.
             lspeed, rspeed = get_wheel_speeds((way_point[0], way_point[1],0))
-            # print(lspeed, rspeed)
+            print(lspeed, rspeed)
             leftMotor.setVelocity(lspeed)
             rightMotor.setVelocity(rspeed)
 
-            if np.linalg.norm(goal_node[:2]-way_point):
+            if np.linalg.norm(goal_node[:2]-way_point) < 1e-5:
                 state=="arrived"
                 continue
 
             if lspeed==0 and rspeed==0:
+                print("next state")
                 state='get_waypoint'
                 sub_state+=1
-        else:
+
+        elif state == "arrived":
                 # Stop
                 print('arrived')
                 # left_wheel_direction, right_wheel_direction = 0, 0
