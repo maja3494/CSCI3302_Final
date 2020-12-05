@@ -233,18 +233,16 @@ def rrt(starting_point, goal_point, k, delta_q):
             for p in path:
                 valid = valid and check_point_v_enemy(p) and check_point_v_walls(p)
 
-        # print('found a node')
         # Add node to tree
         new_node = Node(new_point, parent=parent)
         new_node.path_from_parent = new_node.parent.path_from_parent.copy()
         new_node.path_from_parent += [new_node.point]
         node_list.append(new_node)
 
+        if (np.array_equal(new_point, goal_point)):
+            break
 
     return node_list
-
-
-
 
 def visualize_2D_graph(nodes, goal_point=None):
     '''
@@ -286,11 +284,8 @@ def visualize_2D_graph(nodes, goal_point=None):
     if goal_point is not None:
         plt.plot(goal_point[0], goal_point[1], 'gx')
 
-    plt.show()
-
-
-
-
+    plt.draw()
+    plt.pause(10**-3)
 
 
 '''
@@ -349,13 +344,7 @@ def main():
     # sensor burn in period
     for i in range(10): robot.step(SIM_TIMESTEP)
 
-    # while robot.step(SIM_TIMESTEP) != -1:
-    # print(check_point_v_walls((.43 - EPUCK_DIAMETER - .01,-.16)))
-
     K = 250 # Feel free to adjust as desired
-    # starting_point = player_node
-    # nodes = rrt(starting_point[:2], goal_node[:2], K, np.linalg.norm(BOUNDS/10.))
-    # visualize_2D_graph(nodes, goal_node[:2])
 
     while robot.step(SIM_TIMESTEP) != -1:
 
@@ -364,17 +353,17 @@ def main():
         # time_elapsed = robot.getTime() - last_odometry_update_time
         # update_odometry(left_wheel_direction, right_wheel_direction, time_elapsed)
         # last_odometry_update_time = robot.getTime()
+
         if state == 'get_path':
             sub_state=0
             starting_point = player_node
             # Compute a path from start to target_pose
-            print("before rrt")
             print("goal:",goal_node[:2])
             psuedo_goal=goal_node[:2].copy()
             psuedo_goal[0] += 0.2
-            print("psuedo:",psuedo_goal)
             if check_point_v_walls(psuedo_goal):
                 nodes = rrt(starting_point[:2], psuedo_goal, K, np.linalg.norm(BOUNDS/10.))
+                visualize_2D_graph(nodes, psuedo_goal)
                 valid_start = False
                 valid_goal = -1
                 for i in range(0,len(nodes)):
@@ -385,9 +374,7 @@ def main():
                 if valid_goal != -1 and valid_start:
                     state = 'get_waypoint'
                     global_path=nodes[valid_goal].path_from_parent[:-1]
-                    print(goal_node[:2])
                     global_path.append(goal_node[:2])
-                    print(global_path)
                     sub_state=0
                 else:
                     print("Impossible path computed")
@@ -405,7 +392,6 @@ def main():
             curr=global_path[sub_state].copy()
             way_point=global_path[sub_state+1].copy()
             way_point[1] = translate_y(way_point[1])
-            print(curr,way_point)
             if sub_state + 1 == len(global_path) - 1:
                 theta=0
             else:
@@ -414,7 +400,6 @@ def main():
         elif state == 'move_to_waypoint':
             #get wheel speed heading error currently set to 1 we will need to change that eventually.
             lspeed, rspeed = get_wheel_speeds((way_point[0], way_point[1],0))
-            print(lspeed, rspeed)
             leftMotor.setVelocity(lspeed)
             rightMotor.setVelocity(rspeed)
 
@@ -430,7 +415,6 @@ def main():
         elif state == "arrived":
                 # Stop
                 print('arrived')
-                # left_wheel_direction, right_wheel_direction = 0, 0
                 leftMotor.setVelocity(0)
                 rightMotor.setVelocity(0)
 
