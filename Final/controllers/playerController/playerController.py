@@ -38,7 +38,7 @@ EPUCK_WHEEL_RADIUS = 0.0205
 theta_gain = 1.0
 distance_gain = 0.3
 
-MAX_VEL_REDUCTION = 0.25
+MAX_VEL_REDUCTION = 0.5
 
 # Robot Pose Values
 pose_x = 0
@@ -82,7 +82,6 @@ def update_odometry(left_wheel_direction, right_wheel_direction, time_elapsed):
     pose_y += math.sin(pose_theta) * time_elapsed * EPUCK_MAX_WHEEL_SPEED * (left_wheel_direction + right_wheel_direction)/2.
     pose_theta = get_bounded_theta(pose_theta)
 
-
 def get_bounded_theta(theta):
     '''
     Returns theta bounded in [-PI, PI]
@@ -90,7 +89,6 @@ def get_bounded_theta(theta):
     while theta > math.pi: theta -= 2.*math.pi
     while theta < -math.pi: theta += 2.*math.pi
     return theta
-
 
 def get_wheel_speeds(target_pose):
     '''
@@ -206,7 +204,6 @@ def steer(from_point, to_point, delta_q):
 
     return path, q_new
 
-
 def rrt(starting_point, goal_point, k, delta_q):
     '''
     @param starting_point: Point within state_bounds to grow the RRT from
@@ -296,7 +293,6 @@ def burn_in_sensors():
     """
     for _ in range(10): robot.step(SIM_TIMESTEP)
 
-
 def check_point_v_enemy(p):
     '''
     check_point_v_enemy - checks if a point is valid relative to the obstacle epucks.
@@ -336,18 +332,32 @@ def check_point_v_walls(p):
 
     return True
 
+def detect_collision(p, g):
+    global EPUCK_MAX_WHEEL_SPEED
+    global ENEMY_COORDS, player_node
+    
+    t_x = np.linspace(p[0], g[0], 10)
+    t_y = np.linspace(p[1], g[1], 10)
+
+    travel_time = (np.linalg.norm(p - g) / (EPUCK_MAX_WHEEL_SPEED * MAX_VEL_REDUCTION)) - .44
+    for x, y in ENEMY_COORDS:
+        for i in range(10):
+            print(np.linalg.norm(np.array(t_x[i], t_y[i]) - np.array(x, y)), travel_time * EPUCK_MAX_WHEEL_SPEED)
+            if np.linalg.norm(np.array(t_x[i], t_y[i]) - np.array(x, y)) < travel_time * EPUCK_MAX_WHEEL_SPEED:
+                print("Collision imminent" + str(detect_collision.num), "Travel time" + str(travel_time))
+                detect_collision.num += 1
+                return
+
+
+detect_collision.num = 0
+
 def main():
     global player_node, goal_node, BOUNDS
     global robot, state, global_path, goal_waypoint
     global leftMotor, rightMotor, SIM_TIMESTEP, WHEEL_FORWARD, WHEEL_STOPPED, WHEEL_BACKWARD
-    # global pose_x, pose_y, pose_theta, left_wheel_direction, right_wheel_direction
+    global pose_x, pose_y, pose_theta, left_wheel_direction, right_wheel_direction
 
     # last_odometry_update_time = None
-
-    # Keep track of which direction each wheel is turning
-    left_wheel_direction = WHEEL_STOPPED
-    right_wheel_direction = WHEEL_STOPPED
-
 
     burn_in_sensors()
 
@@ -406,6 +416,7 @@ def main():
                 continue
             next_x, next_y = global_path[goal_waypoint]
             next_y = translate_y(next_y)
+
             # to determine the goal angle, we need to know whether this is the last node or not
             if goal_waypoint == len(global_path) - 1:
                 # is the end point, just point wherever
@@ -424,6 +435,8 @@ def main():
             lspeed, rspeed = get_wheel_speeds(waypoint)
             leftMotor.setVelocity(lspeed)
             rightMotor.setVelocity(rspeed)
+
+            detect_collision(np.array([pose_x, pose_y]), waypoint[:2])
 
             dist_to_waypoint = np.linalg.norm(np.array([pose_x, pose_y]) - waypoint[:2])
             
