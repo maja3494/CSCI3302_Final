@@ -290,6 +290,12 @@ def visualize_2D_graph(nodes, goal_point=None, wait_for_close = True):
         plt.draw()
         plt.pause(10**-3)
 
+def burn_in_sensors():
+    """
+    give the sensors a chance to burn in
+    """
+    for _ in range(10): robot.step(SIM_TIMESTEP)
+
 
 def check_point_v_enemy(p):
     '''
@@ -343,8 +349,7 @@ def main():
     right_wheel_direction = WHEEL_STOPPED
 
 
-    # sensor burn in period
-    for i in range(10): robot.step(SIM_TIMESTEP)
+    burn_in_sensors()
 
     # max number of nodes to include in RRT
     K = 250 # Feel free to adjust as desired
@@ -364,15 +369,18 @@ def main():
             # Compute a path from start to target_pose
             print("goal:",goal_node[:2])
             psuedo_goal=goal_node[:2].copy()
+            # TODO: Don't hardcode this
             psuedo_goal[0] += 0.2
             if check_point_v_walls(psuedo_goal):
                 nodes = rrt(starting_point[:2], psuedo_goal, K, np.linalg.norm(BOUNDS/10.))
-                visualize_2D_graph(nodes, psuedo_goal, wait_for_close = False)
+                # TODO: Doesn't work great after replan
+                # visualize_2D_graph(nodes, psuedo_goal, wait_for_close = False)
                 # loop through the rrt to find the goal point
                 goal_index = -1
                 for i in range(0,len(nodes)):
                     if np.linalg.norm(psuedo_goal-nodes[i].point) < 1e-5:
                         goal_index = i
+                        break
 
                 # did we ever end up finding the goal
                 if goal_index != -1:
@@ -438,10 +446,12 @@ def main():
             # Stop
             leftMotor.setVelocity(0)
             rightMotor.setVelocity(0)
-
-            # visualize_2D_graph(nodes, psuedo_goal)
-
             break
+
+        if (playerSupervisor.check_collisions() >= 5): # the 5 might break at some point 4 is too low though
+            playerSupervisor.supervisor_reset_to_home()
+            burn_in_sensors()
+            state = "get_path"
 
 
 if __name__ == "__main__":

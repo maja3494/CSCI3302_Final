@@ -32,7 +32,6 @@ def init_supervisor():
     start_translation = copy.copy(robot_node.getField("translation").getSFVec3f())
     start_rotation = copy.copy(robot_node.getField("rotation").getSFRotation())
 
-
 def supervisor_reset_to_home():
     global robot_node
     global start_rotation, start_translation
@@ -40,7 +39,6 @@ def supervisor_reset_to_home():
     pos_field.setSFVec3f(start_translation)
     pos_field = robot_node.getField("rotation")
     pos_field.setSFRotation(start_rotation)
-    supervisor.resetPhysics()
     print("Supervisor reset robot to start position")
 
 '''
@@ -101,3 +99,9 @@ def supervisor_get_robot_pose():
     robot_position = np.array(robot_node.getField("translation").getSFVec3f())
     robot_pose = np.array([robot_position[0], robot_position[2], robot_node.getField("rotation").getSFRotation()[3]+math.pi/2])
     return robot_pose
+
+def check_collisions():
+    '''
+    Checks whether the robot is colliding with one of the enemies
+    '''
+    return robot_node.getNumberOfContactPoints()
