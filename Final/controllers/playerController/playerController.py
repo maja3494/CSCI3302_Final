@@ -21,8 +21,10 @@ player_node = playerSupervisor.supervisor_get_robot_pose()
 goal_node = playerSupervisor.supervisor_get_target_pose()
 
 state = "get_path"
-sub_state=0
-global_path=[]
+# the index of the waypoint along the path we are going to next
+goal_waypoint = 0
+# the path to the goal that we are following, filled in during state "get_path"
+global_path = []
 '''
 Global variables concerning the EPUCK
 '''
@@ -61,12 +63,13 @@ rightMotor.setPosition(float('inf'))
 leftMotor.setVelocity(0.0)
 rightMotor.setVelocity(0.0)
 
-'''
-translate_y - gets the y to compatible with our lab implementations
-@param - a world y value
-'''
+
 def translate_y(y):
-    return (y - BOUNDS[1][1]) * -1
+    '''
+    gets the y compatible with our lab implementations
+    @param - a world y value
+    '''
+    return BOUNDS[1][1] - y
 
 def update_odometry(left_wheel_direction, right_wheel_direction, time_elapsed):
     '''
@@ -100,22 +103,21 @@ def get_wheel_speeds(target_pose):
 
     pose_y = translate_y(pose_y)
 
-    # print(target_pose[2],pose_theta)
-    bearing_error = math.atan2( (target_pose[1] - pose_y), (target_pose[0] - pose_x) ) - pose_theta
+    bearing_error = get_bounded_theta(math.atan2( (target_pose[1] - pose_y), (target_pose[0] - pose_x) ) - pose_theta)
     distance_error = np.linalg.norm(target_pose[:2] - np.array([pose_x,pose_y]))
-    heading_error = target_pose[2] -  pose_theta
-
-    # print("h:",heading_error)
+    heading_error = get_bounded_theta(target_pose[2] -  pose_theta)
 
     BEAR_THRESHOLD = 0.06
     DIST_THRESHOLD = 0.03
     dT_gain = theta_gain
     dX_gain = distance_gain
     if distance_error > DIST_THRESHOLD:
+        # print("dist error is large: fixing bearing, error is:", bearing_error)
         dTheta = bearing_error
         if abs(bearing_error) > BEAR_THRESHOLD:
             dX_gain = 0
     else:
+        # print("fixing heading, error is:", heading_error)
         dTheta = heading_error
         dX_gain = 0
 
@@ -124,15 +126,19 @@ def get_wheel_speeds(target_pose):
 
     phi_l = (dX - (dTheta*EPUCK_AXLE_DIAMETER/2.)) / EPUCK_WHEEL_RADIUS
     phi_r = (dX + (dTheta*EPUCK_AXLE_DIAMETER/2.)) / EPUCK_WHEEL_RADIUS
-
-    left_speed_pct = 0
-    right_speed_pct = 0
     
     wheel_rotation_normalizer = max(abs(phi_l), abs(phi_r))
     left_speed_pct = (phi_l) / wheel_rotation_normalizer
     right_speed_pct = (phi_r) / wheel_rotation_normalizer
     
-    if distance_error < 0.05 and abs(heading_error) < 1:    
+    # we'll deal with stopping ourselves if we're close enough,
+    # so set these to be super low
+    # we switch waypoints at .03 distance for reference
+    if distance_error < 0.01 and abs(heading_error) < 0.05:
+        # if distance_error < .01:
+            # print("setting speeds to 0 since distance is low:", distance_error)
+        # if abs(heading_error) < .05:
+            # print("setting speeds to 0 since heading is low:", heading_error)
         left_speed_pct = 0
         right_speed_pct = 0
         
@@ -203,8 +209,6 @@ def steer(from_point, to_point, delta_q):
 
 def rrt(starting_point, goal_point, k, delta_q):
     '''
-    @param state_bounds: matrix of min/max values for each dimension (e.g., [[0,1],[0,1]] for a 2D 1m by 1m square)
-    @param state_is_valid: function that maps states (N-dimensional Real vectors) to a Boolean (indicating free vs. forbidden space)
     @param starting_point: Point within state_bounds to grow the RRT from
     @param goal_point: Point within state_bounds to target with the RRT. (OPTIONAL, can be None)
     @param k: Number of points to sample
@@ -244,57 +248,56 @@ def rrt(starting_point, goal_point, k, delta_q):
 
     return node_list
 
-def visualize_2D_graph(nodes, goal_point=None):
+def visualize_2D_graph(nodes, goal_point=None, wait_for_close = True):
     '''
-    @param state_bounds Array of min/max for each dimension
-    @param obstacles Locations and radii of spheroid obstacles
-    @param nodes List of vertex locations
-    @param edges List of vertex connections
+    @param nodes: List of vertex locations
+    @param goal_point: Where to draw the goal at
+    @param wait_for_close: Whether the program should wait for the user to close the chart window before continuing to run
+                                I highly suggest waiting, as it is incredibly buggy and weird otherwise
     '''
     global BOUNDS
-    state_bounds = BOUNDS
-    fig = plt.figure()
-    plt.xlim(state_bounds[0,0], state_bounds[0,1])
-    plt.ylim(state_bounds[1,0], state_bounds[1,1])
 
 
     goal = None
     for node in nodes:
         if node.parent is not None:
             node_path = np.array(node.path_from_parent)
-            plt.plot(node_path[:,0], node_path[:,1], '-b')
+            plt.plot(node_path[:,0], translate_y(node_path[:,1]), '-b')
         if goal_point is not None and np.linalg.norm(node.point - np.array(goal_point)) <= 1e-5:
             goal = node
-            plt.plot(node.point[0], node.point[1], 'k^')
+            plt.plot(node.point[0], translate_y(node.point[1]), 'k^')
         else:
-            plt.plot(node.point[0], node.point[1], 'ro')
+            plt.plot(node.point[0], translate_y(node.point[1]), 'ro')
 
-    plt.plot(nodes[0].point[0], nodes[0].point[1], 'ko')
+    plt.plot(nodes[0].point[0], translate_y(nodes[0].point[1]), 'ko')
 
     if goal is not None:
         cur_node = goal
         while cur_node is not None:
             if cur_node.parent is not None:
                 node_path = np.array(cur_node.path_from_parent)
-                plt.plot(node_path[:,0], node_path[:,1], '--y')
+                plt.plot(node_path[:,0], translate_y(node_path[:,1]), '--y')
                 cur_node = cur_node.parent
             else:
                 break
 
     if goal_point is not None:
-        plt.plot(goal_point[0], goal_point[1], 'gx')
+        plt.plot(goal_point[0], translate_y(goal_point[1]), 'gx')
 
-    plt.draw()
-    plt.pause(10**-3)
+    if wait_for_close:
+        plt.show()
+    else:
+        plt.draw()
+        plt.pause(10**-3)
 
 
-'''
-check_point_v_enemy - checks if a point is valid relative to the obstacle epucks.
-Does factor in the width of both epucks.
-@param: p - a list-like x, y pair in world coordinates
-@return: True if the point is valid False otherwise
-'''
 def check_point_v_enemy(p):
+    '''
+    check_point_v_enemy - checks if a point is valid relative to the obstacle epucks.
+    Does factor in the width of both epucks.
+    @param: p - a list-like x, y pair in world coordinates
+    @return: True if the point is valid False otherwise
+    '''
     global ENEMY_COORDS
     ENEMY_COORDS = playerSupervisor.supervisor_get_enemy_positions()
 
@@ -304,13 +307,13 @@ def check_point_v_enemy(p):
 
     return True
 
-'''
-check_point_v_walls - checks if a point is valid relative to the obstacle epucks.
-Does factor in the width of both epucks.
-@param: p - a list-like x, y pair in world coordinates
-@return: True if the point is valid False otherwise
-'''
 def check_point_v_walls(p):
+    '''
+    check_point_v_walls - checks if a point is valid relative to the obstacle epucks.
+    Does factor in the width of both epucks.
+    @param: p - a list-like x, y pair in world coordinates
+    @return: True if the point is valid False otherwise
+    '''
     global WALL_COORDS
 
     for coord in WALL_COORDS:
@@ -329,12 +332,12 @@ def check_point_v_walls(p):
 
 def main():
     global player_node, goal_node, BOUNDS
-    global robot, state, global_path, sub_state
+    global robot, state, global_path, goal_waypoint
     global leftMotor, rightMotor, SIM_TIMESTEP, WHEEL_FORWARD, WHEEL_STOPPED, WHEEL_BACKWARD
     # global pose_x, pose_y, pose_theta, left_wheel_direction, right_wheel_direction
 
 
-    last_odometry_update_time = None
+    # last_odometry_update_time = None
 
     # Keep track of which direction each wheel is turning
     left_wheel_direction = WHEEL_STOPPED
@@ -344,6 +347,7 @@ def main():
     # sensor burn in period
     for i in range(10): robot.step(SIM_TIMESTEP)
 
+    # max number of nodes to include in RRT
     K = 250 # Feel free to adjust as desired
 
     while robot.step(SIM_TIMESTEP) != -1:
@@ -355,7 +359,8 @@ def main():
         # last_odometry_update_time = robot.getTime()
 
         if state == 'get_path':
-            sub_state=0
+            print("Computing the path")
+
             starting_point = player_node
             # Compute a path from start to target_pose
             print("goal:",goal_node[:2])
@@ -363,19 +368,22 @@ def main():
             psuedo_goal[0] += 0.2
             if check_point_v_walls(psuedo_goal):
                 nodes = rrt(starting_point[:2], psuedo_goal, K, np.linalg.norm(BOUNDS/10.))
-                visualize_2D_graph(nodes, psuedo_goal)
-                valid_start = False
-                valid_goal = -1
+                visualize_2D_graph(nodes, psuedo_goal, wait_for_close = True)
+                # loop through the rrt to find the goal point
+                goal_index = -1
                 for i in range(0,len(nodes)):
-                    if np.linalg.norm(starting_point[:2]-nodes[i].point) < 1e-5:
-                        valid_start = True
                     if np.linalg.norm(psuedo_goal-nodes[i].point) < 1e-5:
-                        valid_goal = i
-                if valid_goal != -1 and valid_start:
+                        goal_index = i
+
+                # did we ever end up finding the goal
+                if goal_index != -1:
+                    # the path to it is already stored in our "path_to_parent"
+                    global_path = nodes[goal_index].path_from_parent.copy()
+                    # just in case it only got close, just change the last item to the goal
+                    global_path[-1] = goal_node[:2]
+                    # start at the beginning
+                    goal_waypoint = 0
                     state = 'get_waypoint'
-                    global_path=nodes[valid_goal].path_from_parent[:-1]
-                    global_path.append(goal_node[:2])
-                    sub_state=0
                 else:
                     print("Impossible path computed")
                     break
@@ -384,39 +392,57 @@ def main():
                 break
 
         elif state == 'get_waypoint':
-            print("get new point:", )
-            if len(global_path) - 1 <= sub_state:
-                print("oops")
+            print("Getting the next waypoint")
+            # make sure we didn't somehow go out of bounds
+            if goal_waypoint >= len(global_path) or goal_waypoint < 0:
                 state='get_path'
                 continue
-            curr=global_path[sub_state].copy()
-            way_point=global_path[sub_state+1].copy()
-            way_point[1] = translate_y(way_point[1])
-            if sub_state + 1 == len(global_path) - 1:
-                theta=0
+            next_x, next_y = global_path[goal_waypoint]
+            next_y = translate_y(next_y)
+            # to determine the goal angle, we need to know whether this is the last node or not
+            if goal_waypoint == len(global_path) - 1:
+                # is the end point, just point wherever
+                angle = 0
             else:
-                theta=math.atan2((way_point[1]-curr[1]),(way_point[0] - curr[0]))
-            state='move_to_waypoint'
+                # not the end point, point towards the next
+                after_x, after_y = global_path[goal_waypoint+1]
+                after_y = translate_y(after_y)
+                angle = np.arctan2(after_y - next_y, after_x - next_x)
+            waypoint = (next_x, next_y, angle)
+            print("Moving to the next waypoint:", waypoint)
+            state = 'move_to_waypoint'
+
         elif state == 'move_to_waypoint':
             #get wheel speed heading error currently set to 1 we will need to change that eventually.
-            lspeed, rspeed = get_wheel_speeds((way_point[0], way_point[1],0))
+            lspeed, rspeed = get_wheel_speeds(waypoint)
             leftMotor.setVelocity(lspeed)
             rightMotor.setVelocity(rspeed)
 
-            if np.linalg.norm(goal_node[:2]-way_point) < 1e-5:
-                state=="arrived"
-                continue
+            dist_to_waypoint = np.linalg.norm(np.array([pose_x, pose_y]) - waypoint[:2])
+            
+            if dist_to_waypoint > .3:
+                print("we're crazy far away, getting the path again")
+                state = "get_path"
+            elif dist_to_waypoint < .03:
+                # try to get the next waypoint
+                goal_waypoint += 1
 
-            if lspeed==0 and rspeed==0:
-                print("next state")
-                state='get_waypoint'
-                sub_state+=1
+                # but check if it's the last goal or not
+                if goal_waypoint == len(global_path):
+                    state = "arrived"
+                else:
+                    state = 'get_waypoint'
+            # else: we just continue moving
 
         elif state == "arrived":
-                # Stop
-                print('arrived')
-                leftMotor.setVelocity(0)
-                rightMotor.setVelocity(0)
+            print("Arrived at destination")
+            # Stop
+            leftMotor.setVelocity(0)
+            rightMotor.setVelocity(0)
+
+            # visualize_2D_graph(nodes, psuedo_goal)
+
+            break
 
 
 if __name__ == "__main__":
