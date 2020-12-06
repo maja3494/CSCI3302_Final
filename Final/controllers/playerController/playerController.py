@@ -336,7 +336,6 @@ def main():
     global leftMotor, rightMotor, SIM_TIMESTEP, WHEEL_FORWARD, WHEEL_STOPPED, WHEEL_BACKWARD
     # global pose_x, pose_y, pose_theta, left_wheel_direction, right_wheel_direction
 
-
     # last_odometry_update_time = None
 
     # Keep track of which direction each wheel is turning
@@ -368,7 +367,7 @@ def main():
             psuedo_goal[0] += 0.2
             if check_point_v_walls(psuedo_goal):
                 nodes = rrt(starting_point[:2], psuedo_goal, K, np.linalg.norm(BOUNDS/10.))
-                visualize_2D_graph(nodes, psuedo_goal, wait_for_close = True)
+                visualize_2D_graph(nodes, psuedo_goal, wait_for_close = False)
                 # loop through the rrt to find the goal point
                 goal_index = -1
                 for i in range(0,len(nodes)):

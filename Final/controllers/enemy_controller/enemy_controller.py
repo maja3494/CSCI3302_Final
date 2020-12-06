@@ -24,7 +24,7 @@ rightMotor.setPosition(float('inf'))
 leftMotor.setVelocity(0.0)
 rightMotor.setVelocity(0.0)
 
-state = "stationary" #change to moving or stationary
+state = "moving" #change to moving or stationary
 sub_state = "forward"
 
 # Main loop:
