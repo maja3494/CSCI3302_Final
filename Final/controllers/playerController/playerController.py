@@ -161,10 +161,11 @@ class Node:
     """
     Node for RRT/RRT* Algorithm
     """
-    def __init__(self, pt, parent=None):
+    def __init__(self, pt, tt, parent=None):
         self.point = pt # n-Dimensional point
         self.parent = parent # Parent node
         self.path_from_parent = [] # List of points along the way from the parent node (for visualization)
+        self.traveltime = tt
 
 '''
 get_random_valid - get a new point in the map
@@ -221,27 +222,32 @@ def rrt(starting_point, goal_point, k, delta_q):
 
     node_list = []
 
-    node_list.append(Node(starting_point, parent=None)) # Add Node at starting point with no parent
+    node_list.append(Node(starting_point, tt=0, parent=None)) # Add Node at starting point with no parent
     node_list[0].path_from_parent += [node_list[0].point]
 
     for i in range(k):
         valid = False
-        while (not valid):
-            # Naively sample a point (and is there is a goal state periodically use that)
-            new_point = get_random_valid_vertex() if (goal_point is None or np.random.random_sample() > .05) else goal_point
-            # Get this closest parent to this point
-            parent = get_nearest_vertex(node_list, new_point)
+        # Naively sample a point (and is there is a goal state periodically use that)
+        new_point = get_random_valid_vertex() if (goal_point is None or np.random.random_sample() > .05) else goal_point
+        # Get this closest parent to this point
+        parent = get_nearest_vertex(node_list, new_point)
 
-            # Scale this to proper distance
-            path, new_point = steer(parent.point, new_point, delta_q)
+        # Scale this to proper distance
+        path, new_point = steer(parent.point, new_point, delta_q)
 
-            # Check validity of point
-            valid = True
-            for p in path:
-                valid = valid and check_point_v_enemy(p) and check_point_v_walls(p)
+        # time = straightLine(new_point, parent.coords) 
+        # time += turnTime(calcAngles())
+
+        # Check validity of point
+        valid = True
+        for p in path:
+            valid = valid and check_point_v_enemy(p) and check_point_v_walls(p)
+
+        if not valid:
+            continue
 
         # Add node to tree
-        new_node = Node(new_point, parent=parent)
+        new_node = Node(new_point, tt=0, parent=parent)
         new_node.path_from_parent = new_node.parent.path_from_parent.copy()
         new_node.path_from_parent += [new_node.point]
         node_list.append(new_node)
@@ -384,7 +390,10 @@ def turnTime(theta):
     Luke
     return # timesteps
     '''
-    pass
+    lspeed, rspeed = get_wheel_speeds((pose_x, pose_y, theta))
+    dist = abs((EPUCK_AXLE_DIAMETER / 2)/get_bounded_theta(pose_theta - theta))
+    speed = abs(lspeed - rspeed) / 2
+    return (dist / (.032 * speed))
 
 def moving_enemy_collision(next_point, timestep_arrive):
     '''
