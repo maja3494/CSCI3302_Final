@@ -66,8 +66,7 @@ ENEMY_TIME_TO_TURN = 165
 ENEMY_POS = np.zeros((4, ENEMY_TIME_TO_TURN))
 
 # the extra distance we want to leave between an epuck and an enemy
-# an epuck is .074 diameter, so this is about a quarter of an epuck
-COLLISION_BUFFER = .02
+COLLISION_BUFFER = EPUCK_DIAMETER * .25
 
 leftMotor = robot.getMotor('left wheel motor')
 rightMotor = robot.getMotor('right wheel motor')
@@ -243,7 +242,7 @@ def rrt(starting_point, goal_point, k, delta_q):
     for _ in range(k):
         # Naively sample a point (and is there is a goal state periodically use that)
         new_point = get_random_valid_vertex() if (goal_point is None or np.random.random_sample() > .05) else goal_point
-        # Get this closest parent to this point
+        # Get the closest parent to this point
         parent = get_nearest_vertex(node_list, new_point)
 
         # Scale this to proper distance
@@ -270,7 +269,7 @@ def rrt(starting_point, goal_point, k, delta_q):
         # Get the validity of every point in the path
         point_validity = [moving_enemy_collision(point, time) for (point, time) in zip(path, times)]
         # make sure they are all valid
-        if not all(point_validity):
+        if any(point_validity):
             continue
 
         # Add node to tree
@@ -372,6 +371,11 @@ def check_point_v_walls(p):
     return True
 
 def initEnemyCoords():
+    '''
+    populates the globals:
+    ENEMY_COORDS - the starting x, y coordinates of all the enemies
+    ENEMY_POS - an array with all possible positions for the enemies
+    '''
     global ENEMY_COORDS, ENEMY_POS
     ENEMY_COORDS = playerSupervisor.supervisor_get_enemy_positions()
 
@@ -391,15 +395,14 @@ def get_enemy_pos(time):
     @param time - timestep of interest
     @return list of x, y coordinates
     '''
-    index = None
     direction = (time // ENEMY_TIME_TO_TURN) % 2  # will be 'even' going out, 'odd' coming back
     index = time % ENEMY_TIME_TO_TURN
     if direction == 1: # on the return trip
-        index = ENEMY_TIME_TO_TURN - index
-    index = int(round(index))
+        index = ENEMY_TIME_TO_TURN - index - 1
     enemy_positions = []
+    index = int(index)
     for i in range(4):
-        enemy_x = ENEMY_POS[i][index]
+        enemy_x = ENEMY_POS[i, index]
         enemy_y = ENEMY_COORDS[i][1]
         enemy_positions.append((enemy_x, enemy_y))
     return enemy_positions
@@ -448,7 +451,6 @@ def turnTime(theta):
 
 def moving_enemy_collision(next_point, timestep_arrive):
     '''
-    Jake
     @param: next_point - the point of the player to check at
     @param: timestep - the timestep to use to find the enemy position
     @return: bool, True if a collision occurs, false if no collision
@@ -462,13 +464,15 @@ def moving_enemy_collision(next_point, timestep_arrive):
     # check if any of the enemies are hitting the player
     # since they're both circles, their distance when touching will be enemy_rad + player_rad
     # since both are the same, I just used diameter
-    is_collision_list = [dist <= EPUCK_DIAMETER + COLLISION_BUFFER for dist in distances]
+    
+    # TODO: this is disabled because it factors in both x and y direction. we need to change to just x or get better timing functions
+    # is_collision_list = [dist <= EPUCK_DIAMETER + COLLISION_BUFFER for dist in distances]
+    is_collision_list = [dist <= EPUCK_DIAMETER for dist in distances]
     # return true if any of them are colliding, false otherwise
     return any(is_collision_list)
 
 def calcAngles(from_point, to_point):
     '''
-    Jake
     return angle we are trying to get to
     @param: from_point - the point that we as the starting point for our line
     @param: to_point - the point that we use as the ending point of our line
@@ -481,7 +485,6 @@ def calcAngles(from_point, to_point):
 
 def calcAnglesThree(from_point, curr_point, to_point):
     '''
-    Jake
     @param: from_point - the oldest point in the path
     @param: curr_point - the middle point that we're turning on
     @param: to_point - the furthest point that we are heading to
@@ -530,8 +533,7 @@ def main():
             psuedo_goal[0] += 0.2
             if check_point_v_walls(psuedo_goal):
                 nodes = rrt(starting_point[:2], psuedo_goal, K, np.linalg.norm(BOUNDS/10.))
-                # TODO: Doesn't work great after replan
-                # visualize_2D_graph(nodes, psuedo_goal, wait_for_close = False)
+                # visualize_2D_graph(nodes, psuedo_goal, wait_for_close = True)
                 # loop through the rrt to find the goal point
                 goal_index = -1
                 for i in range(0,len(nodes)):

@@ -12,8 +12,12 @@ supervisor = None
 robot_node = None
 target_node = None
 
+enemy_node = []
+enemy_init_trans = []
+enemy_init_rot = []
+
 def init_supervisor():
-    global supervisor, robot_node, target_node
+    global supervisor, robot_node, target_node, enemy_node
     global start_translation, start_rotation
     # create the Supervisor instance.
     supervisor = Supervisor()
@@ -28,17 +32,27 @@ def init_supervisor():
             robot_node = root_children_field.getMFNode(idx)
         if root_children_field.getMFNode(idx).getDef() == "Goal":
             target_node = root_children_field.getMFNode(idx) 
+        if root_children_field.getMFNode(idx).getDef() == "Enemy":
+            enemy_node.append(root_children_field.getMFNode(idx))
+            enemy_init_trans.append(copy.copy(enemy_node[-1].getField("translation").getSFVec3f()))
+            enemy_init_rot.append(copy.copy(enemy_node[-1].getField("rotation").getSFRotation()))
 
     start_translation = copy.copy(robot_node.getField("translation").getSFVec3f())
     start_rotation = copy.copy(robot_node.getField("rotation").getSFRotation())
 
 def supervisor_reset_to_home():
-    global robot_node
+    global robot_node, enemy_node
     global start_rotation, start_translation
     pos_field = robot_node.getField("translation")
     pos_field.setSFVec3f(start_translation)
     pos_field = robot_node.getField("rotation")
     pos_field.setSFRotation(start_rotation)
+
+    for e in range(len(enemy_node)):
+        pos_field = enemy_node[e].getField("translation")
+        pos_field.setSFVec3f(enemy_init_trans[e])
+        pos_field = enemy_node[e].getField("rotation")
+        pos_field.setSFRotation(enemy_init_rot[e])
     print("Supervisor reset robot to start position")
 
 '''
