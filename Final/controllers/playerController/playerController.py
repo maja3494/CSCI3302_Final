@@ -386,16 +386,25 @@ def turnTime(theta):
     '''
     pass
 
-def moving_enemy_collision(timestep):
+def moving_enemy_collision(next_point, timestep_arrive):
     '''
     Jake
+    @param: next_point - the point of the player to check at
     @param: timestep - the timestep to use to find the enemy position
     @return: bool, True if a collision occurs, false if no collision
     '''
-    enemy_pos = getEnemyPos(timestep)
-    player_pos = np.array([pose_x, pose_y])
-    distance = np.linalg.norm(enemy_pos - player_pos)
-    return distance <= EPUCK_DIAMETER + COLLISION_BUFFER
+    #get the positions of all of the enemies
+    all_enemies_pos = getEnemyPos(timestep_arrive)
+    # convert our player to a np list so we can use their np.linalg.norm
+    next_as_np = np.array(next_point)
+    # get the distances from each enemy to our player
+    distances = [np.linalg.norm(next_as_np - np.array(enemy_pos)) for enemy_pos in all_enemies_pos]
+    # check if any of the enemies are hitting the player
+    # since they're both circles, their distance when touching will be enemy_rad + player_rad
+    # since both are the same, I just used diameter
+    is_collision_list = [dist <= EPUCK_DIAMETER + COLLISION_BUFFER for dist in distances]
+    # return true if any of them are colliding, false otherwise
+    return any(is_collision_list)
 
 def calcAngles(from_point, to_point):
     '''
@@ -410,6 +419,21 @@ def calcAngles(from_point, to_point):
     to_x, to_y = to_point
     return np.arctan2(to_y - from_y, to_x - from_x)
 
+def calcAnglesThree(from_point, curr_point, to_point):
+    '''
+    Jake
+    @param: from_point - the oldest point in the path
+    @param: curr_point - the middle point that we're turning on
+    @param: to_point - the furthest point that we are heading to
+    @return: the angle you need to turn counter-clockwise when transitioning from traveling between two lines
+    angle between the lines from_point:curr_point and the line curr_point:to_point
+    '''
+    # get the original angle
+    orig_angle = calcAngles(from_point, curr_point)
+    # get the next angle
+    next_angle = calcAngles(curr_point, to_point)
+    # return how much you have to rotate
+    return next_angle - orig_angle
 
 def main():
     global player_node, goal_node, BOUNDS
