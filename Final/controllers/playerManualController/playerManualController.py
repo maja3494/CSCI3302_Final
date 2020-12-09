@@ -8,6 +8,7 @@ it supports combinations of keys, for up to a total of 8 directions and stopped
 import math
 from controller import Robot, Motor, DistanceSensor, GPS
 import numpy as np
+import playerSupervisor
 
 # reference to the Keyboard module:
 # https://www.cyberbotics.com/doc/reference/keyboard?tab-language=python
@@ -18,7 +19,11 @@ WHEEL_FORWARD = 1
 WHEEL_STOPPED = 0
 WHEEL_BACKWARD = -1
 
-robot = Robot()
+# prep the supervisor
+playerSupervisor.init_supervisor()
+# robot is now contained in the supervisor
+robot = playerSupervisor.supervisor
+
 leftMotor = robot.getMotor('left wheel motor')
 rightMotor = robot.getMotor('right wheel motor')
 leftMotor.setPosition(float('inf'))
@@ -33,6 +38,11 @@ RIGHT_VEL_REDUCTION = MAX_VEL_REDUCTION * rightMotor.getMaxVelocity()
 
 # get the time step of the current world.
 SIM_TIMESTEP = int(robot.getBasicTimeStep())
+
+# the extra distance we want to leave between an epuck and an enemy
+# an epuck is .074 diameter, so this is about a quarter of an epuck
+COLLISION_BUFFER = .02
+EPUCK_DIAMETER = .074
 
 # exchanges keyboard keys for numeric directions
 # see function getDirection() for encodings
@@ -92,16 +102,31 @@ def getDirection():
     # otherwise, just average them
     return (key1 + key2) // 2
 
+def reset_game():
+    '''
+    called when the player dies
+    stops them from moving, moves them back to the start, and wait for the sensors to re-calibrate
+    '''
+    global leftMotor, rightMotor
+    leftMotor.setVelocity(0)
+    rightMotor.setVelocity(0)
+    playerSupervisor.supervisor_reset_to_home()
+    burn_in_sensors()
+
+def burn_in_sensors():
+    """
+    give the sensors a chance to burn in
+    """
+    global robot, SIM_TIMESTEP
+    for _ in range(10): robot.step(int(SIM_TIMESTEP))
 
 
 def main():
     global keyboard
-
     # enable the keyboard to start getting inputs
     # the argument is the sampling period, in milliseconds
     # I put the timestep because it feels right, this may need fixing later
     keyboard.enable(SIM_TIMESTEP)
-    
     # try/except so that we can stop the robot if anything strange happens
     #   this is mostly since the user has control here and so we don't know what to expect
     #   and also because I was breaking it a lot earlier
@@ -109,9 +134,10 @@ def main():
         while robot.step(SIM_TIMESTEP) != -1:
             direction = getDirection()
             (left_dir, right_dir) = dir2wheels[direction]
-
             leftMotor.setVelocity(left_dir * LEFT_VEL_REDUCTION)
             rightMotor.setVelocity(right_dir * RIGHT_VEL_REDUCTION)
+            if (playerSupervisor.check_collisions()):
+                reset_game()
 
     # stop the robot whether we ran into an error or not
     finally:
