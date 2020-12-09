@@ -358,14 +358,26 @@ def getEnemyPos(time):
     @param time - timestep of interest
     @return list of x, y coordinates
     '''
-    pass
+    index = None
+    direction = int(time / ENEMY_TIME_TO_TURN) % 2
+    index = time % ENEMY_TIME_TO_TURN
+    if direction:
+        index = ENEMY_TIME_TO_TURN - index
+    curr_index =[]
+    for i in range(4):
+        curr_index.append([ENEMY_POS[i][index],ENEMY_COORDS[i][1]])
+    return curr_index
 
-def straightLine(coords):
+def straightLine(coord1, coord2):
     """
     Ryan
     return # timesteps
     """
-    pass
+    distance = math.sqrt( (coord1[0]-coord2[0])**2 + (coord1[1]-coord2[1])**2 )
+
+    timestepsTillAtGoal = ( distance / EPUCK_MAX_WHEEL_SPEED ) / .032
+
+    return timestepsTillAtGoal
 
 def turnTime(theta):
     '''
