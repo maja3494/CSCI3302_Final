@@ -28,17 +28,24 @@ global_path = []
 '''
 Global variables concerning the EPUCK
 '''
-EPUCK_MAX_WHEEL_SPEED = 0.12880519 # m/s
+# if running on max, what's the linear distance the wheel will go
+EPUCK_ABSOLUTE_MAX_WHEEL_SPEED = 0.12880519 # m/s
+# size of the entire robot, from wheel to wheel
 EPUCK_DIAMETER = .074
 EPUCK_RADIUS = EPUCK_DIAMETER / 2
+# ???
 EPUCK_AXLE_DIAMETER = 0.053
+# the radius of a single wheel
 EPUCK_WHEEL_RADIUS = 0.0205
 
 # GAIN Values
 theta_gain = 1.0
 distance_gain = 0.3
 
+# what speed to run the robot at
 MAX_VEL_REDUCTION = 0.5
+# the new maximum speed we will allow (we basically always go at max fyi)
+EPUCK_MAX_WHEEL_SPEED = EPUCK_ABSOLUTE_MAX_WHEEL_SPEED * MAX_VEL_REDUCTION
 
 # Robot Pose Values
 pose_x = 0
@@ -82,10 +89,10 @@ def update_odometry(left_wheel_direction, right_wheel_direction, time_elapsed):
     Given the amount of time passed and the direction each wheel was rotating,
     update the robot's pose information accordingly
     '''
-    global pose_x, pose_y, pose_theta, EPUCK_MAX_WHEEL_SPEED, EPUCK_DIAMETER
-    pose_theta += (right_wheel_direction - left_wheel_direction) * time_elapsed * EPUCK_MAX_WHEEL_SPEED / EPUCK_DIAMETER
-    pose_x += math.cos(pose_theta) * time_elapsed * EPUCK_MAX_WHEEL_SPEED * (left_wheel_direction + right_wheel_direction)/2.
-    pose_y += math.sin(pose_theta) * time_elapsed * EPUCK_MAX_WHEEL_SPEED * (left_wheel_direction + right_wheel_direction)/2.
+    global pose_x, pose_y, pose_theta, EPUCK_ABSOLUTE_MAX_WHEEL_SPEED, EPUCK_DIAMETER
+    pose_theta += (right_wheel_direction - left_wheel_direction) * time_elapsed * EPUCK_ABSOLUTE_MAX_WHEEL_SPEED / EPUCK_DIAMETER
+    pose_x += math.cos(pose_theta) * time_elapsed * EPUCK_ABSOLUTE_MAX_WHEEL_SPEED * (left_wheel_direction + right_wheel_direction)/2.
+    pose_y += math.sin(pose_theta) * time_elapsed * EPUCK_ABSOLUTE_MAX_WHEEL_SPEED * (left_wheel_direction + right_wheel_direction)/2.
     pose_theta = get_bounded_theta(pose_theta)
 
 def get_bounded_theta(theta):
@@ -234,7 +241,6 @@ def rrt(starting_point, goal_point, k, delta_q):
     node_list.append(start)
 
     for _ in range(k):
-        valid = False
         # Naively sample a point (and is there is a goal state periodically use that)
         new_point = get_random_valid_vertex() if (goal_point is None or np.random.random_sample() > .05) else goal_point
         # Get this closest parent to this point
@@ -251,8 +257,11 @@ def rrt(starting_point, goal_point, k, delta_q):
             # go back two points to see where we came from and where we're going
             angle = calcAnglesThree(parent.parent.point, parent.point, new_point)
 
+        # print("Parent arrives at:", parent.arrive_time)
         departure_from_parent = parent.arrive_time + turnTime(angle)
+        # print("Departure:", departure_from_parent)
         arrival_at_point = departure_from_parent + straightLine(parent.point, new_point)
+        # print("Arrival:", arrival_at_point)
 
         # get the times at each point along the path
         # since we are traveling at constant speed, we can just use linspace to get them again
@@ -383,14 +392,17 @@ def get_enemy_pos(time):
     @return list of x, y coordinates
     '''
     index = None
-    direction = int(time / ENEMY_TIME_TO_TURN) % 2
+    direction = (time // ENEMY_TIME_TO_TURN) % 2  # will be 'even' going out, 'odd' coming back
     index = time % ENEMY_TIME_TO_TURN
-    if direction:
+    if direction == 1: # on the return trip
         index = ENEMY_TIME_TO_TURN - index
-    curr_index =[]
+    index = int(round(index))
+    enemy_positions = []
     for i in range(4):
-        curr_index.append([ENEMY_POS[i][index],ENEMY_COORDS[i][1]])
-    return curr_index
+        enemy_x = ENEMY_POS[i][index]
+        enemy_y = ENEMY_COORDS[i][1]
+        enemy_positions.append((enemy_x, enemy_y))
+    return enemy_positions
 
 def straightLine(coord1, coord2):
     """
@@ -406,12 +418,33 @@ def straightLine(coord1, coord2):
 def turnTime(theta):
     '''
     Luke
-    return # timesteps
+    @param: theta - the total angle to turn in radians
+    @return: the number of timesteps to complete said turn
     '''
-    lspeed, rspeed = get_wheel_speeds((pose_x, pose_y, theta))
-    dist = abs((EPUCK_AXLE_DIAMETER / 2)/get_bounded_theta(pose_theta - theta))
-    speed = abs(lspeed - rspeed) / 2
-    return (dist / (.032 * speed))
+    # just in case it's a wacky number
+    theta = get_bounded_theta(theta)
+    
+    # hard way: can derive the distance the wheels will travel using forward kinematics
+    # we can take our forward kinematics equation:
+    # angle_rotated = (wheel_angle_left * wheel_radius / robot_diameter) - (wheel_angle_right * wheel_radius / robot_diameter)
+    # and solve for the rotation of the wheels (which we assume to be equal but opposite)
+    # angle_rotated * robot_diameter / wheel_radius = (wheel_angle_left - wheel_angle_right)
+    # angle_rotated * robot_diameter / (2 * wheel_radius) = one_wheel_angle_change
+    # and then with the radius get the linear distance it will travel
+    # one_wheel_linear_dist = angle_rotated * robot_diameter / (2 * wheel_radius) * wheel_radius = angle_rotated * robot_radius
+
+    # easy way: know that it's rotating, so from basic circle math    s = r * theta
+    # they're the same answer, which is nice to see, I just didn't want to delete all my work :/
+    wheel_linear_dist = abs(EPUCK_RADIUS * theta)
+
+    # rotation_speed = rotations / time
+    # therefore::     time = rotations / rotation_speed
+    time = wheel_linear_dist / EPUCK_MAX_WHEEL_SPEED  # m * (s / m) = s
+    time /= .032                                      # s * (steps / s) = steps
+
+    # print("Time to turn", theta, "radians is", time)
+    
+    return time
 
 def moving_enemy_collision(next_point, timestep_arrive):
     '''
