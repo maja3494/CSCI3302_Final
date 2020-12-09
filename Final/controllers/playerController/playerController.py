@@ -361,7 +361,11 @@ def straightLine(coords):
     Ryan
     return # timesteps
     """
-    pass
+    distance = math.sqrt( (coord1[0]-coord2[0])**2 + (coord1[1]-coord2[1])**2 )
+
+    timestepsTillAtGoal = ( distance / EPUCK_MAX_WHEEL_SPEED ) / .032
+
+    return timestepsTillAtGoal
 
 def turnTime(theta):
     '''
