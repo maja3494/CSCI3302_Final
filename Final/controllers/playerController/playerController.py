@@ -53,10 +53,14 @@ Global variables being analagous to MACROs
 WHEEL_FORWARD = 1
 WHEEL_STOPPED = 0
 WHEEL_BACKWARD = -1
-SIM_TIMESTEP = robot.getBasicTimeStep()
+SIM_TIMESTEP = int(robot.getBasicTimeStep())
 BOUNDS = np.array([[-.4, .43], [-.48, .54]])
 ENEMY_TIME_TO_TURN = 165
 ENEMY_POS = np.zeros((4, ENEMY_TIME_TO_TURN))
+
+# the extra distance we want to leave between an epuck and an enemy
+# an epuck is .074 diameter, so this is about a quarter of an epuck
+COLLISION_BUFFER = .02
 
 leftMotor = robot.getMotor('left wheel motor')
 rightMotor = robot.getMotor('right wheel motor')
@@ -373,16 +377,26 @@ def turnTime(theta):
 def moving_enemy_collision(timestep):
     '''
     Jake
-    return bool if collision
+    @param: timestep - the timestep to use to find the enemy position
+    @return: bool, True if a collision occurs, false if no collision
     '''
-    pass
+    enemy_pos = getEnemyPos(timestep)
+    player_pos = np.array([pose_x, pose_y])
+    distance = np.linalg.norm(enemy_pos - player_pos)
+    return distance <= EPUCK_DIAMETER + COLLISION_BUFFER
 
-def calcAngles(pt):
+def calcAngles(from_point, to_point):
     '''
     Jake
     return angle we are trying to get to
+    @param: from_point - the point that we as the starting point for our line
+    @param: to_point - the point that we use as the ending point of our line
+    @return: the angle from the positive x-axis coming out of the from-point, moving counterclockwise to our to-point
     '''
-    pass
+    #unwrap the points since it makes it easier to understand
+    from_x, from_y = from_point
+    to_x, to_y = to_point
+    return np.arctan2(to_y - from_y, to_x - from_x)
 
 
 def main():
@@ -461,7 +475,7 @@ def main():
                 # not the end point, point towards the next
                 after_x, after_y = global_path[goal_waypoint+1]
                 after_y = translate_y(after_y)
-                angle = np.arctan2(after_y - next_y, after_x - next_x)
+                angle = calcAngles((next_x, next_y), (after_x, after_y))
             waypoint = (next_x, next_y, angle)
             print("Moving to the next waypoint:", waypoint)
             state = 'move_to_waypoint'
