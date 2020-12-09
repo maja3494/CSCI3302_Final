@@ -53,8 +53,10 @@ Global variables being analagous to MACROs
 WHEEL_FORWARD = 1
 WHEEL_STOPPED = 0
 WHEEL_BACKWARD = -1
-SIM_TIMESTEP = int(robot.getBasicTimeStep())
+SIM_TIMESTEP = robot.getBasicTimeStep()
 BOUNDS = np.array([[-.4, .43], [-.48, .54]])
+ENEMY_TIME_TO_TURN = 165
+ENEMY_POS = np.zeros((4, ENEMY_TIME_TO_TURN))
 
 leftMotor = robot.getMotor('left wheel motor')
 rightMotor = robot.getMotor('right wheel motor')
@@ -291,7 +293,7 @@ def burn_in_sensors():
     """
     give the sensors a chance to burn in
     """
-    for _ in range(10): robot.step(SIM_TIMESTEP)
+    for _ in range(10): robot.step(int(SIM_TIMESTEP))
 
 def check_point_v_enemy(p):
     '''
@@ -332,24 +334,56 @@ def check_point_v_walls(p):
 
     return True
 
-def detect_collision(p, g):
-    global EPUCK_MAX_WHEEL_SPEED
-    global ENEMY_COORDS, player_node
-    
-    t_x = np.linspace(p[0], g[0], 10)
-    t_y = np.linspace(p[1], g[1], 10)
+def initEnemyCoords():
+    global ENEMY_COORDS, ENEMY_POS
+    ENEMY_COORDS = playerSupervisor.supervisor_get_enemy_positions()
 
-    travel_time = (np.linalg.norm(p - g) / (EPUCK_MAX_WHEEL_SPEED * MAX_VEL_REDUCTION)) - .44
-    for x, y in ENEMY_COORDS:
-        for i in range(10):
-            print(np.linalg.norm(np.array(t_x[i], t_y[i]) - np.array(x, y)), travel_time * EPUCK_MAX_WHEEL_SPEED)
-            if np.linalg.norm(np.array(t_x[i], t_y[i]) - np.array(x, y)) < travel_time * EPUCK_MAX_WHEEL_SPEED:
-                print("Collision imminent" + str(detect_collision.num), "Travel time" + str(travel_time))
-                detect_collision.num += 1
-                return
+    disp = 0.349147 - ENEMY_COORDS[0][0]
 
+    for i in range(len(ENEMY_COORDS)):
+        x = ENEMY_COORDS[i][0]
+        if x > 0:
+            ENEMY_POS[i, :] = np.linspace(x, x - disp, ENEMY_TIME_TO_TURN)
+        else:
+            ENEMY_POS[i, :] = np.linspace(x, x + disp, ENEMY_TIME_TO_TURN)
 
-detect_collision.num = 0
+def getEnemyPos(time):
+    '''
+    Matt
+    Gets epuck position at given time
+    @param time - timestep of interest
+    @return list of x, y coordinates
+    '''
+    pass
+
+def straightLine(coords):
+    """
+    Ryan
+    return # timesteps
+    """
+    pass
+
+def turnTime(theta):
+    '''
+    Luke
+    return # timesteps
+    '''
+    pass
+
+def moving_enemy_collision(timestep):
+    '''
+    Jake
+    return bool if collision
+    '''
+    pass
+
+def calcAngles(pt):
+    '''
+    Jake
+    return angle we are trying to get to
+    '''
+    pass
+
 
 def main():
     global player_node, goal_node, BOUNDS
@@ -359,8 +393,10 @@ def main():
 
     # last_odometry_update_time = None
 
-    burn_in_sensors()
+    # define the init enemy coords
+    initEnemyCoords()
 
+    print(ENEMY_POS)
     # max number of nodes to include in RRT
     K = 250 # Feel free to adjust as desired
 
@@ -435,8 +471,6 @@ def main():
             lspeed, rspeed = get_wheel_speeds(waypoint)
             leftMotor.setVelocity(lspeed)
             rightMotor.setVelocity(rspeed)
-
-            detect_collision(np.array([pose_x, pose_y]), waypoint[:2])
 
             dist_to_waypoint = np.linalg.norm(np.array([pose_x, pose_y]) - waypoint[:2])
             
