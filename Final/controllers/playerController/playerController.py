@@ -512,7 +512,7 @@ def main():
     # print(ENEMY_POS)
 
     # max number of nodes to include in RRT
-    K = 250 # Feel free to adjust as desired
+    K = 1000 # Feel free to adjust as desired
 
     while robot.step(SIM_TIMESTEP) != -1:
 
@@ -525,7 +525,7 @@ def main():
         if state == 'get_path':
             print("Computing the path")
 
-            starting_point = player_node
+            starting_point = playerSupervisor.supervisor_get_robot_pose()
             # Compute a path from start to target_pose
             print("goal:",goal_node[:2])
             psuedo_goal=goal_node[:2].copy()

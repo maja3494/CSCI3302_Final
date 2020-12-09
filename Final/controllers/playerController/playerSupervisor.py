@@ -53,6 +53,8 @@ def supervisor_reset_to_home():
         pos_field.setSFVec3f(enemy_init_trans[e])
         pos_field = enemy_node[e].getField("rotation")
         pos_field.setSFRotation(enemy_init_rot[e])
+        enemy_node[e].restartController()
+
     print("Supervisor reset robot to start position")
 
 '''
