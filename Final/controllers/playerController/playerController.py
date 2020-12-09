@@ -161,11 +161,17 @@ class Node:
     """
     Node for RRT/RRT* Algorithm
     """
-    def __init__(self, pt, tt, parent=None):
+    def __init__(self, pt, arrival = 0, parent=None):
         self.point = pt # n-Dimensional point
-        self.parent = parent # Parent node
-        self.path_from_parent = [] # List of points along the way from the parent node (for visualization)
-        self.traveltime = tt
+
+        # the time it takes to get here from the start node
+        self.arrive_time = arrival
+
+        # Parent node
+        self.parent = parent
+
+        # List of points along the way from the parent node (for visualization)
+        self.path_from_parent = []
 
 '''
 get_random_valid - get a new point in the map
@@ -222,10 +228,12 @@ def rrt(starting_point, goal_point, k, delta_q):
 
     node_list = []
 
-    node_list.append(Node(starting_point, tt=0, parent=None)) # Add Node at starting point with no parent
-    node_list[0].path_from_parent += [node_list[0].point]
+    # Add Node at starting point with no parent
+    start = Node(starting_point, arrival=0, parent=None)
+    start.path_from_parent = [start.point]
+    node_list.append(start)
 
-    for i in range(k):
+    for _ in range(k):
         valid = False
         # Naively sample a point (and is there is a goal state periodically use that)
         new_point = get_random_valid_vertex() if (goal_point is None or np.random.random_sample() > .05) else goal_point
@@ -235,21 +243,31 @@ def rrt(starting_point, goal_point, k, delta_q):
         # Scale this to proper distance
         path, new_point = steer(parent.point, new_point, delta_q)
 
-        # time = straightLine(new_point, parent.coords) 
-        # time += turnTime(calcAngles())
+        # figure out turning time
+        if parent.parent is None:
+            # take the current angle and current position as the starting values
+            angle = pose_theta - calcAngles((pose_x, pose_y), new_point)
+        else:
+            # go back two points to see where we came from and where we're going
+            angle = calcAnglesThree(parent.parent.point, parent.point, new_point)
 
-        # Check validity of point
-        valid = True
-        for p in path:
-            valid = valid and check_point_v_enemy(p) and check_point_v_walls(p)
+        departure_from_parent = parent.arrive_time + turnTime(angle)
+        arrival_at_point = departure_from_parent + straightLine(parent.point, new_point)
 
-        if not valid:
+        # get the times at each point along the path
+        # since we are traveling at constant speed, we can just use linspace to get them again
+        times = np.linspace(departure_from_parent, arrival_at_point, len(path))
+
+        # Get the validity of every point in the path
+        point_validity = [moving_enemy_collision(point, time) for (point, time) in zip(path, times)]
+        # make sure they are all valid
+        if not all(point_validity):
             continue
 
         # Add node to tree
-        new_node = Node(new_point, tt=0, parent=parent)
+        new_node = Node(new_point, arrival=arrival_at_point, parent=parent)
         new_node.path_from_parent = new_node.parent.path_from_parent.copy()
-        new_node.path_from_parent += [new_node.point]
+        new_node.path_from_parent.append(new_node.point)
         node_list.append(new_node)
 
         if (np.array_equal(new_point, goal_point)):
@@ -316,7 +334,7 @@ def check_point_v_enemy(p):
     ENEMY_COORDS = playerSupervisor.supervisor_get_enemy_positions()
 
     for coord in ENEMY_COORDS:
-        if (np.linalg.norm(coord - np.array(p)) < EPUCK_DIAMETER):
+        if (np.linalg.norm(coord - np.array(p)) < EPUCK_DIAMETER + COLLISION_BUFFER):
             return False
 
     return True
@@ -357,7 +375,7 @@ def initEnemyCoords():
         else:
             ENEMY_POS[i, :] = np.linspace(x, x + disp, ENEMY_TIME_TO_TURN)
 
-def getEnemyPos(time):
+def get_enemy_pos(time):
     '''
     Matt
     Gets epuck position at given time
@@ -403,7 +421,7 @@ def moving_enemy_collision(next_point, timestep_arrive):
     @return: bool, True if a collision occurs, false if no collision
     '''
     #get the positions of all of the enemies
-    all_enemies_pos = getEnemyPos(timestep_arrive)
+    all_enemies_pos = get_enemy_pos(timestep_arrive)
     # convert our player to a np list so we can use their np.linalg.norm
     next_as_np = np.array(next_point)
     # get the distances from each enemy to our player
@@ -455,7 +473,8 @@ def main():
     # define the init enemy coords
     initEnemyCoords()
 
-    print(ENEMY_POS)
+    # print(ENEMY_POS)
+
     # max number of nodes to include in RRT
     K = 250 # Feel free to adjust as desired
 
