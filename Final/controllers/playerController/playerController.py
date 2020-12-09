@@ -53,7 +53,7 @@ Global variables being analagous to MACROs
 WHEEL_FORWARD = 1
 WHEEL_STOPPED = 0
 WHEEL_BACKWARD = -1
-SIM_TIMESTEP = robot.getBasicTimeStep()
+SIM_TIMESTEP = int(robot.getBasicTimeStep())
 BOUNDS = np.array([[-.4, .43], [-.48, .54]])
 ENEMY_TIME_TO_TURN = 165
 ENEMY_POS = np.zeros((4, ENEMY_TIME_TO_TURN))
@@ -354,7 +354,15 @@ def getEnemyPos(time):
     @param time - timestep of interest
     @return list of x, y coordinates
     '''
-    pass
+    index = None
+    direction = int(time / ENEMY_TIME_TO_TURN) % 2
+    index = time % ENEMY_TIME_TO_TURN
+    if direction:
+        index = ENEMY_TIME_TO_TURN - index
+    curr_index =[]
+    for i in range(4):
+        curr_index.append([ENEMY_POS[i][index],ENEMY_COORDS[i][1]])
+    return curr_index
 
 def straightLine(coords):
     """
