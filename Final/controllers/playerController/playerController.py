@@ -364,7 +364,7 @@ def getEnemyPos(time):
         curr_index.append([ENEMY_POS[i][index],ENEMY_COORDS[i][1]])
     return curr_index
 
-def straightLine(coords):
+def straightLine(coord1, coord2):
     """
     Ryan
     return # timesteps
